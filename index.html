@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Beyond the Scalpel · Vote</title>
+<title>Beyond the Scalpel · Vote & ask</title>
 <style>
 :root{--ground:#0a161d;--panel:#11252e;--line:#24404c;--ink:#eaf6f4;--ink2:#a9c4c4;--scrub:#3cc9b4;--ok:#7bdc8c;--bad:#ff7d78}
 *{box-sizing:border-box}
@@ -25,6 +25,13 @@ h1{font-size:28px;line-height:1.05;margin:0}
 .wait{border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--ink2);line-height:1.5}
 .note{font-size:14px;color:var(--ink2);line-height:1.4}
 .ok{color:var(--ok);font-weight:600}
+.ask{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--panel);display:flex;flex-direction:column;gap:10px}
+.ask h2{margin:0;font-size:18px}
+.ask textarea,.ask input{width:100%;background:#0d1d24;border:1px solid var(--line);border-radius:10px;color:var(--ink);font:inherit;font-size:16px;padding:10px 12px}
+.ask textarea{min-height:90px;resize:vertical}
+.ask button{align-self:flex-start;border:0;border-radius:10px;background:var(--scrub);color:var(--ground);font-weight:700;font-size:16px;padding:12px 20px;cursor:pointer}
+.ask button:disabled{opacity:.5}
+.ask .cnt{font:12px ui-monospace,monospace;color:var(--ink2);text-align:right}
 </style>
 </head>
 <body>
@@ -33,6 +40,14 @@ h1{font-size:28px;line-height:1.05;margin:0}
   <h1>Vote from your phone</h1>
   <div class="st"><span class="dot" id="dot"></span><span id="stx">Connecting…</span></div>
   <div id="app"><div class="wait">Waiting for the speaker…</div></div>
+  <section class="ask" dir="auto">
+    <h2>Ask the speaker · اسأل المحاضر</h2>
+    <textarea id="qTxt" maxlength="280" placeholder="Type your question… اكتب سؤالك هنا"></textarea>
+    <div class="cnt"><span id="qN">0</span> / 280</div>
+    <input id="qName" maxlength="40" placeholder="Your name (optional) · الاسم (اختياري)">
+    <button id="qSend">Send question · إرسال</button>
+    <p class="note" id="qMsg">The speaker chooses which questions to show on the screen.</p>
+  </section>
   <p class="note">Anonymous. Keep this page open: each question appears here when the speaker reaches it.</p>
 </main>
 <script>
@@ -78,6 +93,24 @@ function listen(){
   es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.event === "message") take(m.message); } catch (x) {} };
   es.onerror = () => setLive(false, "Reconnecting…");
 }
+/* audience questions */
+let qLast = 0;
+try { $("#qName").value = localStorage.getItem("bts.qname") || ""; } catch (e) {}
+$("#qTxt").oninput = () => $("#qN").textContent = $("#qTxt").value.length;
+$("#qSend").onclick = async () => {
+  const q = $("#qTxt").value.trim(), n = $("#qName").value.trim().slice(0, 40), msg = $("#qMsg"), b = $("#qSend");
+  if (q.length < 3){ msg.textContent = "Write your question first · اكتب السؤال الأول"; return; }
+  const wait = 20 - Math.floor((Date.now() - qLast) / 1000);
+  if (wait > 0){ msg.textContent = "Please wait " + wait + " s before the next question."; return; }
+  try { localStorage.setItem("bts.qname", n); } catch (e) {}
+  b.disabled = true; msg.textContent = "Sending…";
+  const body = JSON.stringify({t:"q", q: q.slice(0, 280), n, u: cid, ts: Date.now()});
+  for (let i = 0; i < 4; i++){
+    try { const r = await fetch(BASE + TOPIC + "-q", {method: "POST", body}); if (r.ok){ qLast = Date.now(); $("#qTxt").value = ""; $("#qN").textContent = "0"; msg.innerHTML = '<span class="ok">Question sent ✓ · تم الإرسال</span>'; b.disabled = false; return; } } catch (e) {}
+    await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+  }
+  b.disabled = false; msg.textContent = "Could not send. Check your connection and try again.";
+};
 latest().then(() => { draw(); listen(); });
 </script>
 </body>
