@@ -32,6 +32,7 @@ h1{font-size:28px;line-height:1.05;margin:0}
 .si .bb{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .si .bb button{border:1px solid var(--line);border-radius:10px;background:#0d1d24;color:var(--ink);font:600 14px system-ui,sans-serif;padding:10px 6px;cursor:pointer}
 .si .bb button.on0{background:#ff7d78;border-color:#ff7d78;color:#1a0706}
+.si .bb button.on2{background:#5aa9e6;border-color:#5aa9e6;color:#05181c}
 .si .bb button.on1{background:var(--scrub);border-color:var(--scrub);color:var(--ground)}
 .si.right{border-color:var(--ok)} .si.wrong{border-color:var(--bad)}
 .si .res{font-size:13px;margin-top:8px;color:var(--ink2)}
@@ -98,10 +99,10 @@ function draw(){
 let draft = {};
 function drawSort(p, key){
   const app = $("#app"), sent = mine[key], d = draft[key] || (draft[key] = Array.isArray(sent) ? sent.slice() : p.items.map(() => -1));
-  const done = d.every(x => x === 0 || x === 1), score = p.rev && Array.isArray(sent) ? sent.filter((x, i) => x === p.ans[i]).length : 0;
+  const done = d.every(x => x >= 0), score = p.rev && Array.isArray(sent) ? sent.filter((x, i) => x === p.ans[i]).length : 0;
   app.innerHTML = `<div class="q">${esc(p.q)}</div><p class="note" style="margin:6px 0 0">${p.rev ? "Correct sort below." : "Tap where each case belongs, then press Send."}</p>
   <div class="srt">${p.items.map((it, i) => { const pick = d[i], ok = p.rev && Array.isArray(sent) ? sent[i] === p.ans[i] : null;
-    return `<div class="si ${ok === true ? "right" : ok === false ? "wrong" : ""}"><p>${i + 1}. ${esc(it)}</p><div class="bb">${p.bins.map((b, k) => `<button data-i="${i}" data-b="${k}" class="${pick === k ? "on" + k : ""}" ${p.rev ? "disabled" : ""}>${esc(b)}</button>`).join("")}</div>${p.rev ? `<div class="res">${ok === true ? "✓ " : ok === false ? "✗ " : ""}Answer: <b>${esc(p.bins[p.ans[i]])}</b></div>` : ""}</div>`; }).join("")}</div>
+    return `<div class="si ${ok === true ? "right" : ok === false ? "wrong" : ""}"><p>${i + 1}. ${esc(it)}</p><div class="bb" style="grid-template-columns:repeat(${p.bins.length},1fr)">${p.bins.map((b, k) => `<button data-i="${i}" data-b="${k}" class="${pick === k ? "on" + k : ""}" ${p.rev ? "disabled" : ""}>${esc(b)}</button>`).join("")}</div>${p.rev ? `<div class="res">${ok === true ? "✓ " : ok === false ? "✗ " : ""}Answer: <b>${esc(p.bins[p.ans[i]])}</b></div>` : ""}</div>`; }).join("")}</div>
   ${p.rev ? (Array.isArray(sent) ? `<p class="ok" style="margin-top:12px">Your score: ${score} / ${p.items.length}</p>` : "") : `<button class="send" id="srtSend" ${done ? "" : "disabled"} style="margin-top:12px">${Array.isArray(sent) ? "Update my answers" : "Send · إرسال"} (${d.filter(x => x >= 0).length}/${p.items.length})</button>${Array.isArray(sent) ? '<p class="ok" style="margin-top:8px">Sent ✓ You can change it until the answer is revealed.</p>' : ""}`}`;
   app.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { if (p.rev) return; d[+b.dataset.i] = +b.dataset.b; drawSort(p, key); });
   const s = $("#srtSend"); if (s) s.onclick = () => sendSort(p, key, d.slice());
