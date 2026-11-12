@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <title>Beyond the Scalpel · Vote & ask</title>
 <style>
 :root{--ground:#0a161d;--panel:#11252e;--line:#24404c;--ink:#eaf6f4;--ink2:#a9c4c4;--scrub:#3cc9b4;--ok:#7bdc8c;--bad:#ff7d78}
@@ -64,6 +65,17 @@ h1{font-size:28px;line-height:1.05;margin:0}
 <script>
 const TOPIC = "btsc86831fc2a14f8a6", BASE = "https://ntfy.sh/";
 const L = "ABCDEF";
+/* second path with no daily quota: public MQTT servers. Votes and questions go to both paths. */
+const ROOT = "bts-c86831fc2a14f8a6", MQ = [];
+function mqPub(sub, body, retain){ let ok = false; MQ.forEach(c => { if (c.connected){ try { c.publish(ROOT + "/" + sub, body, {qos:1, retain: !!retain}); ok = true; } catch (e) {} } }); return ok; }
+function mqStart(){
+  if (typeof mqtt === "undefined") return;
+  ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"].forEach(url => { try {
+    const c = mqtt.connect(url, {clientId: "btsP" + Math.random().toString(16).slice(2), reconnectPeriod: 3000, connectTimeout: 10000, clean: true});
+    c.on("connect", () => { c.subscribe(ROOT + "/s"); setLive(true, "Connected to the lecture"); });
+    c.on("message", (tp, m) => { if (tp === ROOT + "/s") take(m.toString()); });
+    MQ.push(c); } catch (e) {} });
+}
 let state = null, mine = {}, cid = "";
 try { mine = JSON.parse(localStorage.getItem("bts.mine") || "{}"); cid = localStorage.getItem("bts.cid") || ""; } catch (e) {}
 if (!cid){ cid = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem("bts.cid", cid); } catch (e) {} }
@@ -99,11 +111,12 @@ async function sendSort(p, key, arr){
   mine[key] = arr; try { localStorage.setItem("bts.mine", JSON.stringify(mine)); } catch (e) {}
   draw();
   const body = JSON.stringify({id: p.id, s: arr, u: cid, ep: state.ep || 0});
+  const viaMq = mqPub("v/" + (state.ep || 0) + "/" + p.id + "/" + cid, body, true);
   for (let i = 0; i < 4; i++){
     try { const r = await fetch(BASE + TOPIC + "-v", {method: "POST", body}); if (r.ok) return; } catch (e) {}
     await new Promise(r => setTimeout(r, 1500 * (i + 1)));
   }
-  setLive(false, "Could not send. Check your connection and tap again.");
+  if (!viaMq) setLive(false, "Could not send. Check your connection and tap again.");
 }
 async function vote(k){
   if (!state || !state.poll || state.poll.rev) return;
@@ -111,11 +124,12 @@ async function vote(k){
   mine[key] = k; try { localStorage.setItem("bts.mine", JSON.stringify(mine)); } catch (e) {}
   draw();
   const body = JSON.stringify({id: p.id, c: k, u: cid, ep: state.ep || 0});
+  const viaMq = mqPub("v/" + (state.ep || 0) + "/" + p.id + "/" + cid, body, true);
   for (let i = 0; i < 4; i++){
     try { const r = await fetch(BASE + TOPIC + "-v", {method: "POST", body}); if (r.ok) return; } catch (e) {}
     await new Promise(r => setTimeout(r, 1500 * (i + 1)));
   }
-  setLive(false, "Could not send. Check your connection and tap again.");
+  if (!viaMq) setLive(false, "Could not send. Check your connection and tap again.");
 }
 function take(msg){ try { const d = JSON.parse(msg); if (d && d.t === "state" && (!state || (d.ts || 0) >= (state.ts || 0))){ state = d; draw(); } } catch (e) {} }
 async function latest(){
@@ -139,13 +153,15 @@ $("#qSend").onclick = async () => {
   if (wait > 0){ msg.textContent = "Please wait " + wait + " s before the next question."; return; }
   try { localStorage.setItem("bts.qname", n); } catch (e) {}
   b.disabled = true; msg.textContent = "Sending…";
-  const body = JSON.stringify({t:"q", q: q.slice(0, 280), n, u: cid, ts: Date.now()});
+  const qid = cid + "-" + Date.now().toString(36), body = JSON.stringify({t:"q", q: q.slice(0, 280), n, u: cid, ts: Date.now(), qid});
+  if (mqPub("q/" + qid, body, true)){ qLast = Date.now(); $("#qTxt").value = ""; $("#qN").textContent = "0"; msg.innerHTML = '<span class="ok">Question sent ✓ · تم الإرسال</span>'; b.disabled = false; fetch(BASE + TOPIC + "-q", {method: "POST", body}).catch(() => {}); return; }
   for (let i = 0; i < 4; i++){
     try { const r = await fetch(BASE + TOPIC + "-q", {method: "POST", body}); if (r.ok){ qLast = Date.now(); $("#qTxt").value = ""; $("#qN").textContent = "0"; msg.innerHTML = '<span class="ok">Question sent ✓ · تم الإرسال</span>'; b.disabled = false; return; } } catch (e) {}
     await new Promise(r => setTimeout(r, 1500 * (i + 1)));
   }
   b.disabled = false; msg.textContent = "Could not send. Check your connection and try again.";
 };
+mqStart();
 latest().then(() => { draw(); listen(); });
 </script>
 </body>
